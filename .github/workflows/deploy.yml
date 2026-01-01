@@ -102,24 +102,6 @@ jobs:
           source: 'docker-compose.yml'
           target: '~/dao-app'
 
-      - name: Copy prometheus.yml to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'prometheus.yml'
-          target: '~/dao-app'
-
-      - name: Copy promtail-config.yml to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'promtail-config.yml'
-          target: '~/dao-app'
-
       - name: Deploy application
         uses: appleboy/ssh-action@v1.0.3
         with:

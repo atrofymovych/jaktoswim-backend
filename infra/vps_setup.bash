@@ -1,101 +1,50 @@
 #!/bin/bash
 
-sudo apt update
-sudo apt upgrade -y
-sudo apt install ufw
-sudo apt install fail2ban
-sudo apt install unattended-upgrades
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow OpenSSH
-sudo ufw list
-sudo ufw status
-sudo ufw allow 443
-sudo ufw allow 80
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 22
+# Exit on error
+set -e
 
-# WebRTC TURN/STUN Server Ports
-echo ">>> Configuring WebRTC TURN/STUN server ports..."
-sudo ufw allow 3478/tcp    # TURN/STUN TCP port
-sudo ufw allow 3478/udp    # TURN/STUN UDP port
-sudo ufw allow 49152:65535/udp  # TURN relay port range (UDP only)
+echo "🚀 Starting VPS Setup..."
 
-sudo ufw --force enable
-sudo ufw status
+# Update system
+echo "📦 Updating system packages..."
+apt-get update && apt-get upgrade -y
+apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg lsb-release ufw git
 
-echo "✅ WebRTC TURN/STUN ports configured:"
-echo "   - Port 3478 (TCP/UDP) - TURN/STUN server"
-echo "   - Ports 49152-65535 (UDP) - TURN relay range"
-echo "   - All ports configured for both ingress and egress"
+# Setup Firewall (UFW)
+echo "🛡️ Configuring Firewall..."
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 8080/tcp # For Traefik Dashboard / Dozzle / App debug if needed
+# Enable UFW
+echo "y" | ufw enable
 
-sudo systemctl start fail2ban.service
+# Install Docker
+echo "🐳 Installing Docker..."
+if ! command -v docker &> /dev/null; then
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    
+    # Enable Docker service
+    systemctl enable docker
+    systemctl start docker
+else
+    echo "Docker already installed."
+fi
 
-
-# Add Docker's official GPG key:
-sudo apt-get update
-sudo apt-get install ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo docker run hello-world
-
-# Setup deployment directories and files
-echo ">>> Setting up deployment directories..."
-mkdir -p ~/dao-app-dev
+# Create app directory
+echo "Tb Creating app directory..."
 mkdir -p ~/dao-app
+cd ~/dao-app
 
-# Create acme.json files with correct permissions for Traefik
-echo ">>> Creating acme.json files for SSL certificates..."
-touch ~/dao-app-dev/acme.json
-touch ~/dao-app/acme.json
-chmod 600 ~/dao-app-dev/acme.json
-chmod 600 ~/dao-app/acme.json
-
-# Add user to docker group to avoid sudo for docker commands
-echo ">>> Adding user to docker group..."
-sudo usermod -aG docker $USER
-
-echo "✅ Deployment directories and SSL certificate files created."
-echo "⚠️  You may need to log out and back in for docker group changes to take effect."
-
-# A script to generate and authorize an SSH key for GitHub Actions.
-
-echo ">>> Generating a new 4096-bit RSA key for GitHub Actions..."
-# Generate a key without a passphrase, outputting to a specific file.
-ssh-keygen -t rsa -b 4096 \
-  -f ~/.ssh/github_actions_key \
-  -C "GitHub Actions Key" \
-  -N ''
-
-echo ">>> Authorizing the new public key..."
-# Append the public key to the authorized_keys file.
-cat ~/.ssh/github_actions_key.pub >> ~/.ssh/authorized_keys
-
-echo ">>> Setting strict file permissions for SSH..."
-# Set correct permissions for security.
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/github_actions_key
-chmod 644 ~/.ssh/github_actions_key.pub
-
-
-echo "✅ SSH key setup for GitHub Actions is complete on the server."
-echo ""
-echo "🎥 WebRTC TURN/STUN server ports have been configured:"
-echo "   - Port 3478 (TCP/UDP) for TURN/STUN signaling"
-echo "   - Ports 49152-65535 (UDP) for TURN relay traffic"
-echo ""
-echo "⬇️ COPY THE PRIVATE KEY BELOW AND ADD IT AS A GITHUB REPOSITORY SECRET NAMED 'VPS_SSH_PRIVATE_KEY' ⬇️"
-echo "========================================================================================================"
-cat ~/.ssh/github_actions_key
-echo "========================================================================================================"
+echo "✅ VPS Setup Complete! Ready for deployment."
+echo "👉 Your server IP: $(curl -s ifconfig.me)"
+echo "👉 Add this IP to your GitHub Secrets as SSH_HOST"
