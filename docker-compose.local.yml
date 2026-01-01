@@ -1,0 +1,15 @@
+services:
+  daoserver:
+    env_file:
+      - .env
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    volumes:
+      - daovolume:/dockervolumes
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: ./service-account-key.json
+
+
+volumes:
+  daovolume:

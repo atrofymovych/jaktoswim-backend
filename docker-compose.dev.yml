@@ -1,0 +1,121 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik-dev
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=nikborsh.ufo@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--metrics.prometheus=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./acme.json:/letsencrypt/acme.json"
+    networks:
+      - proxy-dev
+
+  daoserver:
+    image: ${IMAGE}
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    volumes:
+      - daovolume-dev:/dockervolumes
+    env_file:
+      - ./.env
+    networks:
+      - proxy-dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.daoserver.rule=Host(`dev-dao-api.crm-system.art`)"
+      - "traefik.http.routers.daoserver.entrypoints=websecure"
+      - "traefik.http.routers.daoserver.tls.certresolver=myresolver"
+      - "traefik.http.services.daoserver.loadbalancer.server.port=8080"
+      # WebSocket support
+      - "traefik.http.routers.daoserver.middlewares=websocket-headers"
+      - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Connection=Upgrade"
+      - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Upgrade=websocket"
+      - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Sec-WebSocket-Protocol=chat,superchat"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus-dev
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data-dev:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - proxy-dev
+    ports:
+      - "127.0.0.1:9091:9090"
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter-dev
+    networks:
+      - proxy-dev
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  grafana:
+    image: grafana/grafana:11.1.1
+    container_name: grafana-dev
+    volumes:
+      - grafana-data-dev:/var/lib/grafana
+    networks:
+      - proxy-dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`dev-grafana.crm-system.art`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki-dev
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data-dev:/loki
+    networks:
+      - proxy-dev
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail-dev
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - proxy-dev
+
+
+
+
+volumes:
+  daovolume-dev:
+  prometheus-data-dev: {}
+  grafana-data-dev: {}
+  loki-data-dev: {}
+
+networks:
+  proxy-dev:
+    name: proxy-dev

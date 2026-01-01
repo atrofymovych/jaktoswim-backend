@@ -1,0 +1,6 @@
+services:
+  daoserver:
+    image: ${IMAGE}:latest
+    build:
+      dockerfile: ./Dockerfile
+      context: .
